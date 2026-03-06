@@ -184,6 +184,19 @@ app.get("/courses/:semester", verifyToken, (req, res) => {
   });
 });
 
+app.get("/topics/:cid", verifyToken, (req, res) => {
+  const cid = req.params.cid;
+  
+  const query = "SELECT * FROM topics WHERE cid = ?";
+  db.query(query, [cid], (err, results) => {
+    if (err) {
+      console.error("Database error fetching topics:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json(results);
+  });
+});
+
 // Proxy endpoint to fetch LeetCode stats to bypass frontend CORS issues
 app.get("/leetcode/:username", async (req, res) => {
   try {
