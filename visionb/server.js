@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: ["http://localhost:5174", "http://127.0.0.1:5174"],
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
   credentials: true
 }));
 
@@ -171,13 +171,26 @@ app.post("/logout", (req, res) => {
   res.json({ message: "Logged out successfully" });
 });
 
+app.get("/courses/:semester", verifyToken, (req, res) => {
+  const semester = req.params.semester;
+  
+  const query = "SELECT * FROM courses WHERE semester = ?";
+  db.query(query, [semester], (err, results) => {
+    if (err) {
+      console.error("Database error fetching courses:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json(results);
+  });
+});
+
 // Proxy endpoint to fetch LeetCode stats to bypass frontend CORS issues
 app.get("/leetcode/:username", async (req, res) => {
   try {
     const { username } = req.params;
     // Using dynamic import for node-fetch is modern standard, or native fetch in Node 18+
     // Since Node is v22+, native fetch is available globally!
-    const response = await fetch(`https://alfa-leetcode-api.onrender.com/${username}`);
+    const response = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${username}`);
     
     if (!response.ok) {
         return res.status(response.status).json({ error: "Failed to fetch from LeetCode API" });
