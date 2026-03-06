@@ -177,10 +177,9 @@ app.put("/profile", verifyToken, (req, res) => {
 });
 
 app.post("/logout", (req, res) => {
-  // Clear the token cookie
   res.clearCookie("token", {
     httpOnly: true,
-    secure: false, // Match setting from login
+    secure: false,
     sameSite: "lax"
   });
   res.json({ message: "Logged out successfully" });
@@ -216,7 +215,6 @@ app.get("/topics/:cid", verifyToken, (req, res) => {
   });
 });
 
-// Get user's completed topics for a specific course
 app.get("/completed-topics/:cid", verifyToken, (req, res) => {
   const cid = req.params.cid;
   const username = req.user.username;
@@ -233,12 +231,11 @@ app.get("/completed-topics/:cid", verifyToken, (req, res) => {
       console.error("Database error fetching completed topics:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    // Return array of just the tids
     res.json(results.map(row => row.tid));
   });
 });
 
-// Mark a topic as completed
+
 app.post("/complete-topic", verifyToken, (req, res) => {
   console.log("POST /complete-topic received:", req.body);
   const { tid } = req.body;
