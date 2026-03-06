@@ -12,7 +12,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: true, // Allow all origins during debug to rule out CORS mismatches
+  origin: true,
   credentials: true
 }));
 
@@ -26,14 +26,12 @@ const PORT = 8080;
 const SECRET_KEY = "your_secret_key_here";
 
 // Cloudinary Configuration
-// IMPORTANT: In a real app, use environment variables!
 cloudinary.config({
   cloud_name: 'duu0bnya5',
   api_key: '134324521294551',
   api_secret: 'hcoPrYzGieBGwqoLdvLCoO-65kw'
 });
 
-// Multer storage (memory storage for easy upload to Cloudinary)
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -144,7 +142,7 @@ const verifyToken = (req, res, next) => {
 
   try {
     const verified = jwt.verify(token, SECRET_KEY);
-    req.user = verified; // adds username from payload
+    req.user = verified;
     next();
   } catch (err) {
     res.status(400).json({ error: "Invalid token" });
@@ -152,7 +150,7 @@ const verifyToken = (req, res, next) => {
 };
 
 app.get("/profile", verifyToken, (req, res) => {
-  const query = "SELECT name, semester, leetcodeid, username, github_token FROM users WHERE username = ?";
+  const query = "SELECT name, semester, leetcodeid, username FROM users WHERE username = ?";
   db.query(query, [req.user.username], (err, results) => {
     if (err) return res.status(500).json({ error: "Database error" });
     if (results.length === 0) return res.status(404).json({ error: "User not found" });
@@ -162,7 +160,7 @@ app.get("/profile", verifyToken, (req, res) => {
 });
 
 app.put("/profile", verifyToken, (req, res) => {
-  const { name, semester, leetcodeid, github_token } = req.body;
+  const { name, semester, leetcodeid } = req.body;
   
   let parsedSemester = null;
   if (semester) {
@@ -170,8 +168,8 @@ app.put("/profile", verifyToken, (req, res) => {
     parsedSemester = digits ? parseInt(digits, 10) : null;
   }
 
-  const updateQuery = "UPDATE users SET name = ?, semester = ?, leetcodeid = ?, github_token = ? WHERE username = ?";
-  db.query(updateQuery, [name, parsedSemester, leetcodeid, github_token, req.user.username], (err, result) => {
+  const updateQuery = "UPDATE users SET name = ?, semester = ?, leetcodeid = ? WHERE username = ?";
+  db.query(updateQuery, [name, parsedSemester, leetcodeid, req.user.username], (err, result) => {
     if (err) return res.status(500).json({ error: "Database error during update" });
     
     res.json({ message: "Profile updated successfully" });
@@ -373,35 +371,9 @@ app.delete("/certificates", verifyToken, (req, res) => {
 
 // Proxy endpoint to fetch GitHub repositories
 app.get("/github/repos", verifyToken, async (req, res) => {
-  try {
-    // Fetch the token from the database
-    const tokenQuery = "SELECT github_token FROM users WHERE username = ?";
-    db.query(tokenQuery, [req.user.username], async (err, results) => {
-      if (err || results.length === 0 || !results[0].github_token) {
-        return res.status(401).json({ error: "GitHub token not found or invalid" });
-      }
-
-      const token = results[0].github_token;
-      
-      const response = await fetch("https://api.github.com/user/repos?sort=updated&per_page=10", {
-        headers: {
-          "Authorization": `token ${token}`,
-          "Accept": "application/vnd.github.v3+json",
-          "User-Agent": "Vision-Project-App"
-        }
-      });
-
-      if (!response.ok) {
-        return res.status(response.status).json({ error: "Failed to fetch repos from GitHub" });
-      }
-
-      const repos = await response.json();
-      res.json(repos);
-    });
-  } catch (error) {
-    console.error("GitHub proxy error:", error);
-    res.status(500).json({ error: "Server error fetching GitHub repos" });
-  }
+  // Column 'github_token' was removed from 'users' table.
+  // This endpoint is currently disabled or needs an alternative token source.
+  return res.status(501).json({ error: "GitHub integration is currently disabled (token column removed)" });
 });
 
 // Proxy endpoint to fetch LeetCode stats to bypass frontend CORS issues
