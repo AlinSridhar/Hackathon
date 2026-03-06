@@ -177,7 +177,7 @@ app.get("/leetcode/:username", async (req, res) => {
     const { username } = req.params;
     // Using dynamic import for node-fetch is modern standard, or native fetch in Node 18+
     // Since Node is v22+, native fetch is available globally!
-    const response = await fetch(`https://leetcode-stats-api.herokuapp.com/${username}`);
+    const response = await fetch(`https://alfa-leetcode-api.onrender.com/${username}`);
     
     if (!response.ok) {
         return res.status(response.status).json({ error: "Failed to fetch from LeetCode API" });
