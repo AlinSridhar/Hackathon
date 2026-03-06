@@ -173,6 +173,7 @@ app.post("/logout", (req, res) => {
 
 app.get("/courses/:semester", verifyToken, (req, res) => {
   const semester = req.params.semester;
+  console.log(`Fetching courses for semester: ${semester}`);
   
   const query = "SELECT * FROM courses WHERE semester = ?";
   db.query(query, [semester], (err, results) => {
@@ -180,12 +181,14 @@ app.get("/courses/:semester", verifyToken, (req, res) => {
       console.error("Database error fetching courses:", err);
       return res.status(500).json({ error: "Database error" });
     }
+    console.log(`Found ${results.length} courses`);
     res.json(results);
   });
 });
 
 app.get("/topics/:cid", verifyToken, (req, res) => {
   const cid = req.params.cid;
+  console.log(`Fetching topics for course ID: ${cid}`);
   
   const query = "SELECT * FROM topics WHERE cid = ?";
   db.query(query, [cid], (err, results) => {
@@ -193,7 +196,73 @@ app.get("/topics/:cid", verifyToken, (req, res) => {
       console.error("Database error fetching topics:", err);
       return res.status(500).json({ error: "Database error" });
     }
+    console.log(`Found ${results.length} topics`);
     res.json(results);
+  });
+});
+
+// Get user's completed topics for a specific course
+app.get("/completed-topics/:cid", (req, res) => {
+  const cid = req.params.cid;
+  const username = "testuser2"; // Fallback mock user since verifyToken is removed
+
+  const query = `
+    SELECT c.topicid AS tid 
+    FROM completed c 
+    JOIN topics t ON c.topicid = t.tid 
+    WHERE c.userid = ? AND t.cid = ?
+  `;
+  
+  db.query(query, [username, cid], (err, results) => {
+    if (err) {
+      console.error("Database error fetching completed topics:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    // Return array of just the tids
+    res.json(results.map(row => row.tid));
+  });
+});
+
+// Mark a topic as completed
+app.post("/complete-topic", (req, res) => {
+  console.log("POST /complete-topic received:", req.body);
+  const { tid } = req.body;
+  const username = "testuser2"; // Fallback mock user
+
+  if (!tid) {
+      console.log("Error: Topic ID is missing.");
+      return res.status(400).json({ error: "Topic ID is required" });
+  }
+
+  const query = "INSERT INTO completed (userid, topicid) VALUES (?, ?)";
+  db.query(query, [username, tid], (err, result) => {
+    if (err) {
+      // Ignore duplicate entry errors gracefully since it means it's already completed
+      if (err.code === 'ER_DUP_ENTRY') {
+        console.log(`Topic ${tid} is already completed for ${username}.`);
+        return res.json({ message: "Topic already marked as completed." });
+      }
+      console.error("Database error marking topic completed:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    console.log(`Successfully completed topic ${tid} for ${username}`);
+    res.json({ message: "Topic marked as completed", compid: result.insertId });
+  });
+});
+
+// Unmark a topic as completed
+app.delete("/complete-topic/:tid", (req, res) => {
+  console.log("DELETE /complete-topic received for tid:", req.params.tid);
+  const tid = req.params.tid;
+  const username = "testuser2"; // Fallback mock user
+
+  const query = "DELETE FROM completed WHERE userid = ? AND topicid = ?";
+  db.query(query, [username, tid], (err, result) => {
+    if (err) {
+      console.error("Database error unmarking topic:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json({ message: "Topic completion removed" });
   });
 });
 
