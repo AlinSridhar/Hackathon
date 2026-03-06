@@ -38,102 +38,102 @@ const upload = multer({ storage: storage });
 const server = http.createServer(app);
 
 app.post("/login", (req, res) => {
-    const { username, password } = req.body;
-  
-    const query = "SELECT * FROM users WHERE username = ?";
-  
-    db.query(query, [username], async (err, results) => {
-      if (err) return res.status(500).json({ error: "Database error" });
-  
-      if (results.length === 0) {
-        return res.status(401).json({ error: "User not found" });
+  const { username, password } = req.body;
+
+  const query = "SELECT * FROM users WHERE username = ?";
+
+  db.query(query, [username], async (err, results) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+
+    if (results.length === 0) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const user = results[0];
+
+    const match = await bcrypt.compare(password, user.password);
+
+    if (!match) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { username: user.username },
+      SECRET_KEY,
+      { expiresIn: "1d" }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax"
+    });
+
+    res.json({
+      message: "Login successful",
+      user: {
+        username: user.username,
+        name: user.name
       }
-  
-      const user = results[0];
-  
-      const match = await bcrypt.compare(password, user.password);
-  
-      if (!match) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-  
-      const token = jwt.sign(
-        { username: user.username },
-        SECRET_KEY,
-        { expiresIn: "1d" }
-      );
-  
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax"
-      });
-  
-      res.json({
-        message: "Login successful",
-        user: {
-          username: user.username,
-          name: user.name
-        }
-      });
     });
   });
+});
 
-  app.post("/register", async (req, res) => {
-    try {
-      const { name, semester, password, leetcodeUsername,username} = req.body;
-  
-      const checkUser = "SELECT * FROM users WHERE username = ?";
-      db.query(checkUser, [username], async (err, result) => {
-        if (err) return res.status(500).json({ error: "Database error" });
-  
-        if (result.length > 0) {
-          return res.status(400).json({ error: "User already exists" });
-        }
-  
-        const hashedPassword = await bcrypt.hash(password, 10);
-  
-        let parsedSemester = null;
-        if (semester) {
-          const digits = String(semester).replace(/\D/g, '');
-          parsedSemester = digits ? parseInt(digits, 10) : null;
-        }
+app.post("/register", async (req, res) => {
+  try {
+    const { name, semester, password, leetcodeUsername, username } = req.body;
 
-        const insertUser =
-          "INSERT INTO users (name, semester, password, leetcodeid, username) VALUES (?, ?, ?, ?, ?)";
-  
-        db.query(
-          insertUser,
-          [name, parsedSemester, hashedPassword, leetcodeUsername, username],
-          (err, result) => {
-            if (err) {
-              console.error("Database insert error:", err);
-              return res.status(500).json({ error: "Insert failed", details: err.message });
-            }
-  
-            const token = jwt.sign(
-              { username: username },
-              SECRET_KEY,
-              { expiresIn: "1d" }
-            );
-  
-            res.cookie("token", token, {
-              httpOnly: true,
-              secure: false,
-              sameSite: "lax"
-            });
-  
-            res.json({
-              message: "User registered successfully",
-              userId: username
-            });
+    const checkUser = "SELECT * FROM users WHERE username = ?";
+    db.query(checkUser, [username], async (err, result) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+
+      if (result.length > 0) {
+        return res.status(400).json({ error: "User already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      let parsedSemester = null;
+      if (semester) {
+        const digits = String(semester).replace(/\D/g, '');
+        parsedSemester = digits ? parseInt(digits, 10) : null;
+      }
+
+      const insertUser =
+        "INSERT INTO users (name, semester, password, leetcodeid, username) VALUES (?, ?, ?, ?, ?)";
+
+      db.query(
+        insertUser,
+        [name, parsedSemester, hashedPassword, leetcodeUsername, username],
+        (err, result) => {
+          if (err) {
+            console.error("Database insert error:", err);
+            return res.status(500).json({ error: "Insert failed", details: err.message });
           }
-        );
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Server error" });
-    }
-  });
+
+          const token = jwt.sign(
+            { username: username },
+            SECRET_KEY,
+            { expiresIn: "1d" }
+          );
+
+          res.cookie("token", token, {
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax"
+          });
+
+          res.json({
+            message: "User registered successfully",
+            userId: username
+          });
+        }
+      );
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // Middleware to verify JWT
 const verifyToken = (req, res, next) => {
@@ -161,7 +161,7 @@ app.get("/profile", verifyToken, (req, res) => {
 
 app.put("/profile", verifyToken, (req, res) => {
   const { name, semester, leetcodeid } = req.body;
-  
+
   let parsedSemester = null;
   if (semester) {
     const digits = String(semester).replace(/\D/g, '');
@@ -171,7 +171,7 @@ app.put("/profile", verifyToken, (req, res) => {
   const updateQuery = "UPDATE users SET name = ?, semester = ?, leetcodeid = ? WHERE username = ?";
   db.query(updateQuery, [name, parsedSemester, leetcodeid, req.user.username], (err, result) => {
     if (err) return res.status(500).json({ error: "Database error during update" });
-    
+
     res.json({ message: "Profile updated successfully" });
   });
 });
@@ -188,7 +188,7 @@ app.post("/logout", (req, res) => {
 app.get("/courses/:semester", verifyToken, (req, res) => {
   const semester = req.params.semester;
   console.log(`Fetching courses for semester: ${semester}`);
-  
+
   const query = "SELECT * FROM courses WHERE semester = ?";
   db.query(query, [semester], (err, results) => {
     if (err) {
@@ -203,7 +203,7 @@ app.get("/courses/:semester", verifyToken, (req, res) => {
 app.get("/topics/:cid", verifyToken, (req, res) => {
   const cid = req.params.cid;
   console.log(`Fetching topics for course ID: ${cid}`);
-  
+
   const query = "SELECT * FROM topics WHERE cid = ?";
   db.query(query, [cid], (err, results) => {
     if (err) {
@@ -225,7 +225,7 @@ app.get("/completed-topics/:cid", verifyToken, (req, res) => {
     JOIN topics t ON c.topicid = t.tid 
     WHERE c.username = ? AND t.cid = ?
   `;
-  
+
   db.query(query, [username, cid], (err, results) => {
     if (err) {
       console.error("Database error fetching completed topics:", err);
@@ -242,8 +242,8 @@ app.post("/complete-topic", verifyToken, (req, res) => {
   const username = req.user.username;
 
   if (!tid) {
-      console.log("Error: Topic ID is missing.");
-      return res.status(400).json({ error: "Topic ID is required" });
+    console.log("Error: Topic ID is missing.");
+    return res.status(400).json({ error: "Topic ID is required" });
   }
 
   const query = "INSERT INTO completed (username, topicid) VALUES (?, ?)";
@@ -354,14 +354,14 @@ app.delete("/certificates", verifyToken, (req, res) => {
       console.error("Database error deleting certificate:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    
+
     console.log(`Delete result:`, result);
 
     if (result.affectedRows === 0) {
       console.warn(`No certificate found with link ${clink} for user ${username}`);
       return res.status(404).json({ error: "Certificate not found or unauthorized" });
     }
-    
+
     res.json({ message: "Certificate deleted successfully" });
   });
 });
@@ -378,11 +378,11 @@ app.get("/leetcode/:username", async (req, res) => {
   try {
     const { username } = req.params;
     const response = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${username}`);
-    
+
     if (!response.ok) {
-        return res.status(response.status).json({ error: "Failed to fetch from LeetCode API" });
+      return res.status(response.status).json({ error: "Failed to fetch from LeetCode API" });
     }
-    
+
     const data = await response.json();
     res.json(data);
   } catch (error) {
