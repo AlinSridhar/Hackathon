@@ -4,21 +4,40 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
 const db = require("./config/dbconfig");
 
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
+  origin: true, // Allow all origins during debug to rule out CORS mismatches
   credentials: true
 }));
+
+// Global error handler for debugging
+app.use((err, req, res, next) => {
+  console.error("Global error caught:", err);
+  res.status(500).json({ error: "Internal Server Error", details: err.message });
+});
 
 const PORT = 8080;
 const SECRET_KEY = "your_secret_key_here";
 
-const server = http.createServer(app);
+// Cloudinary Configuration
+// IMPORTANT: In a real app, use environment variables!
+cloudinary.config({
+  cloud_name: 'duu0bnya5',
+  api_key: '134324521294551',
+  api_secret: 'hcoPrYzGieBGwqoLdvLCoO-65kw'
+});
 
+// Multer storage (memory storage for easy upload to Cloudinary)
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+const server = http.createServer(app);
 
 app.post("/login", (req, res) => {
     const { username, password } = req.body;
@@ -67,7 +86,6 @@ app.post("/login", (req, res) => {
       const { name, semester, password, leetcodeUsername,username} = req.body;
   
       const checkUser = "SELECT * FROM users WHERE username = ?";
-
       db.query(checkUser, [username], async (err, result) => {
         if (err) return res.status(500).json({ error: "Database error" });
   
@@ -114,7 +132,6 @@ app.post("/login", (req, res) => {
           }
         );
       });
-  
     } catch (error) {
       res.status(500).json({ error: "Server error" });
     }
@@ -135,7 +152,7 @@ const verifyToken = (req, res, next) => {
 };
 
 app.get("/profile", verifyToken, (req, res) => {
-  const query = "SELECT name, semester, leetcodeid, username FROM users WHERE username = ?";
+  const query = "SELECT name, semester, leetcodeid, username, github_token FROM users WHERE username = ?";
   db.query(query, [req.user.username], (err, results) => {
     if (err) return res.status(500).json({ error: "Database error" });
     if (results.length === 0) return res.status(404).json({ error: "User not found" });
@@ -145,7 +162,7 @@ app.get("/profile", verifyToken, (req, res) => {
 });
 
 app.put("/profile", verifyToken, (req, res) => {
-  const { name, semester, leetcodeid } = req.body;
+  const { name, semester, leetcodeid, github_token } = req.body;
   
   let parsedSemester = null;
   if (semester) {
@@ -153,8 +170,8 @@ app.put("/profile", verifyToken, (req, res) => {
     parsedSemester = digits ? parseInt(digits, 10) : null;
   }
 
-  const updateQuery = "UPDATE users SET name = ?, semester = ?, leetcodeid = ? WHERE username = ?";
-  db.query(updateQuery, [name, parsedSemester, leetcodeid, req.user.username], (err, result) => {
+  const updateQuery = "UPDATE users SET name = ?, semester = ?, leetcodeid = ?, github_token = ? WHERE username = ?";
+  db.query(updateQuery, [name, parsedSemester, leetcodeid, github_token, req.user.username], (err, result) => {
     if (err) return res.status(500).json({ error: "Database error during update" });
     
     res.json({ message: "Profile updated successfully" });
@@ -202,15 +219,15 @@ app.get("/topics/:cid", verifyToken, (req, res) => {
 });
 
 // Get user's completed topics for a specific course
-app.get("/completed-topics/:cid", (req, res) => {
+app.get("/completed-topics/:cid", verifyToken, (req, res) => {
   const cid = req.params.cid;
-  const username = "testuser2"; // Fallback mock user since verifyToken is removed
+  const username = req.user.username;
 
   const query = `
     SELECT c.topicid AS tid 
     FROM completed c 
     JOIN topics t ON c.topicid = t.tid 
-    WHERE c.userid = ? AND t.cid = ?
+    WHERE c.username = ? AND t.cid = ?
   `;
   
   db.query(query, [username, cid], (err, results) => {
@@ -224,17 +241,17 @@ app.get("/completed-topics/:cid", (req, res) => {
 });
 
 // Mark a topic as completed
-app.post("/complete-topic", (req, res) => {
+app.post("/complete-topic", verifyToken, (req, res) => {
   console.log("POST /complete-topic received:", req.body);
   const { tid } = req.body;
-  const username = "testuser2"; // Fallback mock user
+  const username = req.user.username;
 
   if (!tid) {
       console.log("Error: Topic ID is missing.");
       return res.status(400).json({ error: "Topic ID is required" });
   }
 
-  const query = "INSERT INTO completed (userid, topicid) VALUES (?, ?)";
+  const query = "INSERT INTO completed (username, topicid) VALUES (?, ?)";
   db.query(query, [username, tid], (err, result) => {
     if (err) {
       // Ignore duplicate entry errors gracefully since it means it's already completed
@@ -245,18 +262,18 @@ app.post("/complete-topic", (req, res) => {
       console.error("Database error marking topic completed:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    console.log(`Successfully completed topic ${tid} for ${username}`);
+    console.log(`Successfully completed topic ${tid} for ${username}. Resulting compid: ${result.insertId}`);
     res.json({ message: "Topic marked as completed", compid: result.insertId });
   });
 });
 
 // Unmark a topic as completed
-app.delete("/complete-topic/:tid", (req, res) => {
+app.delete("/complete-topic/:tid", verifyToken, (req, res) => {
   console.log("DELETE /complete-topic received for tid:", req.params.tid);
   const tid = req.params.tid;
-  const username = "testuser2"; // Fallback mock user
+  const username = req.user.username;
 
-  const query = "DELETE FROM completed WHERE userid = ? AND topicid = ?";
+  const query = "DELETE FROM completed WHERE username = ? AND topicid = ?";
   db.query(query, [username, tid], (err, result) => {
     if (err) {
       console.error("Database error unmarking topic:", err);
@@ -266,12 +283,131 @@ app.delete("/complete-topic/:tid", (req, res) => {
   });
 });
 
+// CERTIFICATES ENDPOINTS
+
+// Fetch all certificates for the logged-in user
+app.get("/certificates", verifyToken, (req, res) => {
+  const query = "SELECT title, clink FROM certificate WHERE usrnm = ?";
+  db.query(query, [req.user.username], (err, results) => {
+    if (err) {
+      console.error("Database error fetching certificates:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json(results);
+  });
+});
+
+// Upload a new certificate
+app.post("/certificates/upload", verifyToken, upload.single('image'), (req, res) => {
+  const { title } = req.body;
+  const username = req.user.username;
+
+  if (!req.file) {
+    return res.status(400).json({ error: "No image file provided" });
+  }
+
+  if (!title) {
+    return res.status(400).json({ error: "Certificate title is required" });
+  }
+
+  // Upload to Cloudinary using the buffer
+  cloudinary.uploader.upload_stream(
+    { folder: "vision_certificates", resource_type: "auto" },
+    (error, result) => {
+      if (error) {
+        console.error("Cloudinary upload error:", error);
+        return res.status(500).json({ error: "Upload failed" });
+      }
+
+      // Save to Database (Table: certificate, Columns: usrnm, clink, title)
+      const imageUrl = result.secure_url;
+      console.log(`Cloudinary upload success for ${username}. URL: ${imageUrl}. Saving to DB...`);
+
+      const insertQuery = "INSERT INTO certificate (usrnm, clink, title) VALUES (?, ?, ?)";
+      db.query(insertQuery, [username, imageUrl, title], (dbErr, dbResult) => {
+        if (dbErr) {
+          console.error("Database insert error for certificate:", dbErr);
+          return res.status(500).json({ error: "Database save failed" });
+        }
+        console.log(`Certificate saved to DB for ${username}. Affected rows: ${dbResult.affectedRows}`);
+        res.json({
+          message: "Certificate uploaded successfully",
+          certificate: {
+            title,
+            clink: imageUrl
+          }
+        });
+      });
+    }
+  ).end(req.file.buffer);
+});
+
+// Delete a certificate (using clink since no id column exists)
+app.delete("/certificates", verifyToken, (req, res) => {
+  const { clink } = req.body;
+  const username = req.user.username;
+
+  if (!clink) {
+    return res.status(400).json({ error: "Certificate link (clink) is required for deletion" });
+  }
+
+  console.log(`Attempting to delete certificate with link: ${clink} for user: ${username}`);
+
+  const query = "DELETE FROM certificate WHERE clink = ? AND usrnm = ?";
+  db.query(query, [clink, username], (err, result) => {
+    if (err) {
+      console.error("Database error deleting certificate:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    console.log(`Delete result:`, result);
+
+    if (result.affectedRows === 0) {
+      console.warn(`No certificate found with link ${clink} for user ${username}`);
+      return res.status(404).json({ error: "Certificate not found or unauthorized" });
+    }
+    
+    res.json({ message: "Certificate deleted successfully" });
+  });
+});
+
+// Proxy endpoint to fetch GitHub repositories
+app.get("/github/repos", verifyToken, async (req, res) => {
+  try {
+    // Fetch the token from the database
+    const tokenQuery = "SELECT github_token FROM users WHERE username = ?";
+    db.query(tokenQuery, [req.user.username], async (err, results) => {
+      if (err || results.length === 0 || !results[0].github_token) {
+        return res.status(401).json({ error: "GitHub token not found or invalid" });
+      }
+
+      const token = results[0].github_token;
+      
+      const response = await fetch("https://api.github.com/user/repos?sort=updated&per_page=10", {
+        headers: {
+          "Authorization": `token ${token}`,
+          "Accept": "application/vnd.github.v3+json",
+          "User-Agent": "Vision-Project-App"
+        }
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "Failed to fetch repos from GitHub" });
+      }
+
+      const repos = await response.json();
+      res.json(repos);
+    });
+  } catch (error) {
+    console.error("GitHub proxy error:", error);
+    res.status(500).json({ error: "Server error fetching GitHub repos" });
+  }
+});
+
 // Proxy endpoint to fetch LeetCode stats to bypass frontend CORS issues
 app.get("/leetcode/:username", async (req, res) => {
   try {
     const { username } = req.params;
-    // Using dynamic import for node-fetch is modern standard, or native fetch in Node 18+
-    // Since Node is v22+, native fetch is available globally!
     const response = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${username}`);
     
     if (!response.ok) {

@@ -1,20 +1,13 @@
-const db = require("./config/dbconfig.js");
+const db = require("./config/dbconfig");
 
-async function checkDatabase() {
-    try {
-        const [tables] = await db.promise().query("SHOW TABLES");
-        console.log("Existing tables:", tables.map(t => Object.values(t)[0]));
+const query = "SELECT * FROM certificates";
 
-        const [courses] = await db.promise().query("SELECT * FROM courses");
-        console.log("\nCourses data:", courses);
-
-        const [topics] = await db.promise().query("SELECT * FROM topics");
-        console.log("\nTopics data:", topics);
-        
-    } catch (err) {
-        console.error("Database check error:", err.message);
-    }
-    process.exit();
-}
-
-checkDatabase();
+db.query(query, (err, results) => {
+  if (err) {
+    console.error("Error fetching certificates:", err);
+    process.exit(1);
+  }
+  console.log("Certificates table content:");
+  console.table(results);
+  process.exit(0);
+});
